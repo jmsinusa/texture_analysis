@@ -300,54 +300,76 @@ class texture(object):
         colours = colourmap.to_rgba(colourindexes, alpha = plt_alpha)
         #2. Plot each cluster
         # Do some plotting
-        f, axarr = plt.subplots(2, 2)
-        #Mean vs SD
-        for cluster_no in cluster_indx:
-            data_indx = self.raw_clusters == cluster_no
-            mean = data[data_indx, 0]
-            sd = data[data_indx, 1]
-            axarr[0, 0].scatter(mean, sd, color = colours[cluster_no])
+        
         if pca_data:
+            f, axarr = plt.subplots(2, 2)
+            #Band 1 vs band 2
+            for cluster_no in cluster_indx:
+                data_indx = self.raw_clusters == cluster_no
+                band1 = data[data_indx, 0]
+                band2 = data[data_indx, 1]
+                axarr[0, 0].scatter(band1, band2, color = colours[cluster_no])
             axarr[0, 0].set_title('PCA 1 v PCA 2')
+            
+            #Band 2 vs Band 3
+            for cluster_no in cluster_indx:
+                data_indx = self.raw_clusters == cluster_no
+                band2 = data[data_indx, 1]
+                band3 = data[data_indx, 2]
+                axarr[0, 1].scatter(band2, band3, color = colours[cluster_no])
+            axarr[0, 1].set_title('PCA 2 v PCA 3')            
+            
+            #Band 2 vs Band 4
+            for cluster_no in cluster_indx:
+                data_indx = self.raw_clusters == cluster_no
+                band2 = data[data_indx, 1]
+                band4 = data[data_indx, 3]
+                axarr[1, 1].scatter(band2, band4, color = colours[cluster_no])
+            axarr[1, 1].set_title('PCA 2 v PCA 4')
+            
+            #Band 1 vs Band 3
+            for cluster_no in cluster_indx:
+                data_indx = self.raw_clusters == cluster_no
+                band1 = data[data_indx, 0]
+                band3 = data[data_indx, 2]
+                axarr[1, 0].scatter(band1, band3, color = colours[cluster_no])
+            axarr[1, 0].set_title('PCA 1 v PCA 3')
+            
         else:
+            #Non-PCA version
+            f, axarr = plt.subplots(2, 2)
+            #Mean vs SD
+            for cluster_no in cluster_indx:
+                data_indx = self.raw_clusters == cluster_no
+                mean = data[data_indx, 0]
+                sd = data[data_indx, 1]
+                axarr[0, 0].scatter(mean, sd, color = colours[cluster_no])
             axarr[0, 0].set_title('mean v sd')
-        
-        #Smoothness vs third moment
-        for cluster_no in cluster_indx:
-            data_indx = self.raw_clusters == cluster_no
-            smoothness = data[data_indx, 2]
-            third_moment = data[data_indx, 3]
-            axarr[0, 1].scatter(smoothness, third_moment, color = colours[cluster_no])
-        if pca_data:
-            axarr[0, 1].set_title('PCA 3 v PCA 4')
-        else:
+            
+            #Smoothness vs third moment
+            for cluster_no in cluster_indx:
+                data_indx = self.raw_clusters == cluster_no
+                smoothness = data[data_indx, 2]
+                third_moment = data[data_indx, 3]
+                axarr[0, 1].scatter(smoothness, third_moment, color = colours[cluster_no])
             axarr[0, 1].set_title('smoothness v third_moment')            
-        
-        #Smoothness vs third moment
-        for cluster_no in cluster_indx:
-            data_indx = self.raw_clusters == cluster_no
-            uniformity = data[data_indx, 4]
-            entropy = data[data_indx, 5]
-            axarr[1, 1].scatter(uniformity, entropy, color = colours[cluster_no])
-        if pca_data:        
-            axarr[1, 1].set_title('PCA 5 v PCA 6')
-        else:
+            
+            #Smoothness vs third moment
+            for cluster_no in cluster_indx:
+                data_indx = self.raw_clusters == cluster_no
+                uniformity = data[data_indx, 4]
+                entropy = data[data_indx, 5]
+                axarr[1, 1].scatter(uniformity, entropy, color = colours[cluster_no])
             axarr[1, 1].set_title('uniformity v entropy')
-        
-        #Mean vs entropy
-        for cluster_no in cluster_indx:
-            data_indx = self.raw_clusters == cluster_no
-            mean = data[data_indx, 0]
-            entropy = data[data_indx, 5]
-            axarr[1, 0].scatter(mean, entropy, color = colours[cluster_no])
-        if pca_data:
-            axarr[1, 0].set_title('PCA 1 v PCA 6')
-        else:
+            
+            #Mean vs entropy
+            for cluster_no in cluster_indx:
+                data_indx = self.raw_clusters == cluster_no
+                mean = data[data_indx, 0]
+                entropy = data[data_indx, 5]
+                axarr[1, 0].scatter(mean, entropy, color = colours[cluster_no])
             axarr[1, 0].set_title('mean v entropy')
-#         if image_no != None:
-#             axarr.title('Image %i (%s)'% (image_no, self.images_files[image_no]))
-#         if cell_no != None:
-#             axarr.title('Cell %i'% cell_no)
+
         plt.show()
 
     def plot_class_textures(self, image_no = None, cell_no = None, 
@@ -361,62 +383,51 @@ class texture(object):
         # Do some plotting
         if pca_data:
             f, axarr = plt.subplots(2, 2)
-            
-            #Mean vs SD
+
+            #Band 1 vs Band 2
             data_indx = self.class_result == True
-            mean = data[data_indx, 0]
-            sd = data[data_indx, 1]
-            axarr[0, 0].scatter(mean, sd, color = 'red')
+            band1 = data[data_indx, 0]
+            band2 = data[data_indx, 1]
+            axarr[0, 0].scatter(band1, band2, color = 'red')
             data_indx = self.class_result == False
-            mean = data[data_indx, 0]
-            sd = data[data_indx, 1]
-            axarr[0, 0].scatter(mean, sd, color = 'black')
-            if pca_data:
-                axarr[0, 0].set_title('PCA 1 v PCA 2')
-            else:
-                axarr[0, 0].set_title('mean v sd')
+            band1 = data[data_indx, 0]
+            band2 = data[data_indx, 1]
+            axarr[0, 0].scatter(band1, band2, color = 'black')
+            axarr[0, 0].set_title('PCA 1 v PCA 2')
             
-            #Smoothness vs third moment
+            #Band 2 vs Band 3
             data_indx = self.class_result == True
-            smoothness = data[data_indx, 2]
-            third_moment = data[data_indx, 3]
-            axarr[0, 1].scatter(smoothness, third_moment, color = 'red')
+            band2 = data[data_indx, 1]
+            band3 = data[data_indx, 2]
+            axarr[0, 1].scatter(band2, band3, color = 'red')
             data_indx = self.class_result == False
-            smoothness = data[data_indx, 2]
-            third_moment = data[data_indx, 3]
-            axarr[0, 1].scatter(smoothness, third_moment, color = 'black')
-            if pca_data:
-                axarr[0, 1].set_title('PCA 3 v PCA 4')
-            else:
-                axarr[0, 1].set_title('smoothness v third_moment')       
+            band2 = data[data_indx, 1]
+            band3 = data[data_indx, 2]
+            axarr[0, 1].scatter(band2, band3, color = 'black')
+            axarr[0, 1].set_title('PCA 2 v PCA 3')
                 
-            #Uniformity vs entropy
+            #Band 2 vs Band 4
             data_indx = self.class_result == True
-            uniformity = data[data_indx, 4]
-            entropy = data[data_indx, 5]
-            axarr[1, 1].scatter(uniformity, entropy, color = 'red')
+            band2 = data[data_indx, 1]
+            band4 = data[data_indx, 3]
+            axarr[1, 1].scatter(band2, band4, color = 'red')
             data_indx = self.class_result == False
-            uniformity = data[data_indx, 4]
-            entropy = data[data_indx, 5]
-            axarr[1, 1].scatter(uniformity, entropy, color = 'black')
-            if pca_data:        
-                axarr[1, 1].set_title('PCA 5 v PCA 6')
-            else:
-                axarr[1, 1].set_title('uniformity v entropy')
-    
-            #Mean vs entropy
+            band2 = data[data_indx, 1]
+            band4 = data[data_indx, 3]
+            axarr[1, 1].scatter(band2, band4, color = 'black')
+            axarr[1, 1].set_title('PCA 2 v PCA 4')
+            
+            #Band 1 vs Band 4
             data_indx = self.class_result == True
-            mean = data[data_indx, 0]
-            entropy = data[data_indx, 5]
-            axarr[1, 0].scatter(mean, entropy, color = 'red')
+            band1 = data[data_indx, 0]
+            band3 = data[data_indx, 2]
+            axarr[1, 0].scatter(band1, band3, color = 'red')
             data_indx = self.class_result == False
-            mean = data[data_indx, 0]
-            entropy = data[data_indx, 5]
-            axarr[1, 0].scatter(mean, entropy, color = 'black')
-            if pca_data:
-                axarr[1, 0].set_title('PCA 1 v PCA 6')
-            else:
-                axarr[1, 0].set_title('mean v entropy')
+            band1 = data[data_indx, 0]
+            band3 = data[data_indx, 2]
+            axarr[1, 0].scatter(band1, band3, color = 'black')    
+            axarr[1, 0].set_title('PCA 1 v PCA 3')
+            
         else:
             #Not pca
             f, axarr = plt.subplots(2, 2)
@@ -430,10 +441,7 @@ class texture(object):
             mean = data[data_indx, 0]
             sd = data[data_indx, 1]
             axarr[0, 0].scatter(mean, sd, color = 'black')
-            if pca_data:
-                axarr[0, 0].set_title('PCA 1 v PCA 2')
-            else:
-                axarr[0, 0].set_title('mean v sd')
+            axarr[0, 0].set_title('mean v sd')
             
             #Smoothness vs third moment
             data_indx = self.class_result == True
@@ -444,10 +452,7 @@ class texture(object):
             smoothness = data[data_indx, 2]
             third_moment = data[data_indx, 3]
             axarr[0, 1].scatter(smoothness, third_moment, color = 'black')
-            if pca_data:
-                axarr[0, 1].set_title('PCA 3 v PCA 4')
-            else:
-                axarr[0, 1].set_title('smoothness v third_moment')       
+            axarr[0, 1].set_title('smoothness v third_moment')       
                 
             #Uniformity vs entropy
             data_indx = self.class_result == True
@@ -458,10 +463,7 @@ class texture(object):
             uniformity = data[data_indx, 4]
             entropy = data[data_indx, 5]
             axarr[1, 1].scatter(uniformity, entropy, color = 'black')
-            if pca_data:        
-                axarr[1, 1].set_title('PCA 5 v PCA 6')
-            else:
-                axarr[1, 1].set_title('uniformity v entropy')
+            axarr[1, 1].set_title('uniformity v entropy')
     
             #Mean vs entropy
             data_indx = self.class_result == True
@@ -472,10 +474,7 @@ class texture(object):
             mean = data[data_indx, 0]
             entropy = data[data_indx, 5]
             axarr[1, 0].scatter(mean, entropy, color = 'black')
-            if pca_data:
-                axarr[1, 0].set_title('PCA 1 v PCA 6')
-            else:
-                axarr[1, 0].set_title('mean v entropy')
+            axarr[1, 0].set_title('mean v entropy')
 
         plt.show()
         
