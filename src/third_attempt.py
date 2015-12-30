@@ -11,6 +11,10 @@ import matplotlib.patches as patches
 import matplotlib.colors as colors
 import matplotlib.cm as colormap
 from sklearn.decomposition import PCA
+# from matplotlib.widgets import Lasso
+# from matplotlib.collections import RegularPolyCollection
+# from matplotlib.colors import colorConverter
+# from matplotlib import path
 import os
 
 def read_jpg(filename = r'/Users/james/blog/20150918_republicanPCA/cropped_images/Donald_Trump.jpg'):
@@ -276,8 +280,22 @@ class texture(object):
                                                norm_data = norm_data, centre_data = centre_data, pca_data = pca_data)
         #2. cluster
         if method == 'rand':
+            #Randomly assign points to clusters 0 to 5.
+            #Anomalies are clusters 3, 4, 5
             cluster_results = np.random.randint(0, high = 6, size = data.shape[0])
             bin_results = cluster_results >= 3
+        if method == 'manual':
+            #Manually select points that are anomalies. Anomalies are in cluster 1
+            plotdata = [Datum(*xy) for xy in data[:, :2]]
+            xmin = np.min(data[:, 0])
+            xmax = np.max(data[:, 0])
+            ymin = np.min(data[:, 1])
+            ymax = np.max(data[:, 1])
+            ax = plt.axes(xlim=(xmin, xmax), ylim=(ymin, ymax), autoscale_on=False)
+            lman = LassoManager(ax, plotdata)
+            plt.show()
+            print lman.collection
+
         else:
             raise exceptions.AttributeError('method %s not known.'% method)
         self.raw_clusters = cluster_results
@@ -575,7 +593,70 @@ class texture(object):
     def _onclick(self, event):
         print 'Corner selected at (%i, %i)'% (round(event.xdata), round(event.ydata)) 
         self.corners.append([event.xdata, event.ydata])
-     
+
+
+
+
+
+# class Datum(object):
+#     colorin = colorConverter.to_rgba('red')
+#     colorout = colorConverter.to_rgba('blue')
+# 
+#     def __init__(self, x, y, include=False):
+#         self.x = x
+#         self.y = y
+#         if include:
+#             self.color = self.colorin
+#         else:
+#             self.color = self.colorout
+# 
+# 
+# class LassoManager(object):
+#     def __init__(self, ax, data):
+#         self.axes = ax
+#         self.canvas = ax.figure.canvas
+#         self.data = data
+# 
+#         self.Nxy = len(data)
+# 
+#         facecolors = [d.color for d in data]
+#         self.xys = [(d.x, d.y) for d in data]
+#         fig = ax.figure
+#         self.collection = RegularPolyCollection(
+#             fig.dpi, 6, sizes=(100,),
+#             facecolors=facecolors,
+#             offsets=self.xys,
+#             transOffset=ax.transData)
+# 
+#         ax.add_collection(self.collection)
+# 
+#         self.cid = self.canvas.mpl_connect('button_press_event', self.onpress)
+# 
+#     def callback(self, verts):
+#         facecolors = self.collection.get_facecolors()
+#         p = path.Path(verts)
+#         ind = p.contains_points(self.xys)
+#         for i in range(len(self.xys)):
+#             if ind[i]:
+#                 facecolors[i] = Datum.colorin
+#             else:
+#                 facecolors[i] = Datum.colorout
+# 
+#         self.canvas.draw_idle()
+#         self.canvas.widgetlock.release(self.lasso)
+#         del self.lasso
+# 
+#     def onpress(self, event):
+#         if self.canvas.widgetlock.locked():
+#             return
+#         if event.inaxes is None:
+#             return
+#         self.lasso = Lasso(event.inaxes,
+#                            (event.xdata, event.ydata),
+#                            self.callback)
+#         # acquire a lock on the widget drawing
+#         self.canvas.widgetlock(self.lasso)
+
 if __name__ == '__main__':
     S = texture(r'/Users/james/blog/20150918_republicanPCA/cropped_images')
     #S.select_grid_corners()
@@ -585,11 +666,11 @@ if __name__ == '__main__':
     
     S.measure_all_textures(bins = 16)
     #cell = S._getdata(2)
-    S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = True, centre_data = True, pca_data = True)
-    S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = False, centre_data = True, pca_data = False)
-    S.cluster_cells(image_no = 0, cell_no = None, method = 'rand')
-    S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = True)
-    S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = False)
-    S.plot_class_textures(image_no = 0, cell_no = None, pca_data = True)
-    S.plot_class_textures(image_no = 0, cell_no = None, pca_data = False)
+    #S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = True, centre_data = True, pca_data = True)
+    #S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = False, centre_data = True, pca_data = False)
+    S.cluster_cells(image_no = 0, cell_no = None, method = 'manual')
+    #S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = True)
+    #S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = False)
+    #S.plot_class_textures(image_no = 0, cell_no = None, pca_data = True)
+    #S.plot_class_textures(image_no = 0, cell_no = None, pca_data = False)
     
