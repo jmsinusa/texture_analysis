@@ -11,10 +11,8 @@ import matplotlib.patches as patches
 import matplotlib.colors as colors
 import matplotlib.cm as colormap
 from sklearn.decomposition import PCA
-# from matplotlib.widgets import Lasso
-# from matplotlib.collections import RegularPolyCollection
-# from matplotlib.colors import colorConverter
-# from matplotlib import path
+from sklearn.cluster import KMeans
+import operator
 import os
 
 def read_jpg(filename = r'/Users/james/blog/20150918_republicanPCA/cropped_images/Donald_Trump.jpg'):
@@ -64,6 +62,18 @@ def calc_norm_data(data):
     sds = np.std(data, 0)
     data = np.divide(data, sds)
     return data
+
+def order_means(data, cluster_nos):
+    '''Order the cluster numbers in increasing values of the mean of the first dimension of data'''
+    cluster_means = {}
+    for ii in np.unique(cluster_nos):
+        pos = cluster_nos == ii
+        cluster_means[ii] = np.mean(data[pos, 0])
+    sorted_cluster_means = sorted(cluster_means.items(), key = operator.itemgetter(1))
+    sorted_cluster_nos = []
+    for item in sorted_cluster_means:
+        sorted_cluster_nos.append(item[0])
+    return sorted_cluster_nos
 
 class texture(object):
     '''
@@ -271,7 +281,8 @@ class texture(object):
         return data        
     
     def cluster_cells(self, image_no = None, cell_no = None, method = None, 
-                      norm_data = False, centre_data = False, pca_data = False):
+                      norm_data = False, centre_data = False, pca_data = False, 
+                      kmeans_k = 2):
         '''Select all cells in either image_no or cell_no and cluster using method
         self.raw_clusters - the cluster the cell is assigned to be the clusering algorithm
         self.class_results - TRUE if an anomoly, FLASE if not'''
@@ -286,16 +297,15 @@ class texture(object):
             bin_results = cluster_results >= 3
         if method == 'manual':
             #Manually select points that are anomalies. Anomalies are in cluster 1
-            plotdata = [Datum(*xy) for xy in data[:, :2]]
-            xmin = np.min(data[:, 0])
-            xmax = np.max(data[:, 0])
-            ymin = np.min(data[:, 1])
-            ymax = np.max(data[:, 1])
-            ax = plt.axes(xlim=(xmin, xmax), ylim=(ymin, ymax), autoscale_on=False)
-            lman = LassoManager(ax, plotdata)
-            plt.show()
-            print lman.collection
-
+            exceptions.NotImplementedError('Not implemented on mac due to mac specific error.')
+        if method == 'kmeans':
+            #Run k-means with k = kmeans_k and hope for the best
+            #The cluster with the highest mean is taken as anomalous 
+            kmeans = KMeans(n_clusters = kmeans_k, n_init = 30)
+            cluster_results = kmeans.fit_predict(data)
+            cluster_order = order_means(data, cluster_results)
+            bin_results = cluster_results == cluster_order[-1]
+            
         else:
             raise exceptions.AttributeError('method %s not known.'% method)
         self.raw_clusters = cluster_results
@@ -304,18 +314,21 @@ class texture(object):
     def plot_clusters_textures(self, image_no = None, cell_no = None,
                                 norm_data = False, centre_data = False, pca_data = False):
         '''Plot the texture results for either an image or a cell,
-        coloured by the cluster numbers from self.clusters'''
+        coloured by the cluster numbers from self.raw_clusters'''
         #1. Select the relevant data
         data = self._select_image_or_cell_data(image_no = image_no, cell_no = cell_no, 
                                                norm_data = norm_data, centre_data = centre_data, pca_data = pca_data)
         cluster_indx = np.unique(self.raw_clusters)
+        print "DEBUG"
+        print cluster_indx
         #2. Set colour palate
         plt_alpha = 1.0
-        colourmap = get_cmap(max(cluster_indx))
+        colourmap = get_cmap(len(cluster_indx) + 1)
         #Randomise colours - wise?
         #colourindexes = np.random.choice(cluster_indx, size = len(cell_indexes), replace = False)
         colourindexes = cluster_indx
         colours = colourmap.to_rgba(colourindexes, alpha = plt_alpha)
+        print colours
         #2. Plot each cluster
         # Do some plotting
         
@@ -668,9 +681,9 @@ if __name__ == '__main__':
     #cell = S._getdata(2)
     #S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = True, centre_data = True, pca_data = True)
     #S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = False, centre_data = True, pca_data = False)
-    S.cluster_cells(image_no = 0, cell_no = None, method = 'manual')
+    S.cluster_cells(image_no = 0, cell_no = None, norm_data = True, method = 'kmeans', kmeans_k = 2 )
     #S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = True)
-    #S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = False)
+    S.plot_clusters_textures(image_no = 0, cell_no = None, norm_data = True, pca_data = False)
     #S.plot_class_textures(image_no = 0, cell_no = None, pca_data = True)
-    #S.plot_class_textures(image_no = 0, cell_no = None, pca_data = False)
+    S.plot_class_textures(image_no = 0, cell_no = None, norm_data = True, pca_data = False)
     
