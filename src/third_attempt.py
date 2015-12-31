@@ -614,7 +614,47 @@ class texture(object):
                                          edgecolor = None, linewidth = 0, fill = True, facecolor = 'red', alpha = 0.15)
                 ax.add_patch(rect)
         plt.title('%i cells in this image are anomalous'% (anom_count))
-        plt.show()     
+        plt.show()  
+    
+    def show_image_cell(self, image_no, cell_no, ax):
+        '''Show image number image_no with cell number cell_no highlighted'''
+        #setup the known points for finding the cell bounding boxes
+        
+        image_to_display = self.load_one_image(image_no)
+        
+        #display grid squares
+        
+         
+        #ax = fig.add_subplot(111)
+        ax.imshow(image_to_display, cmap = 'gray')
+        this_cell = self.grididx[cell_no]
+        x1 = this_cell[0]
+        y1 = this_cell[1]
+        x2 = this_cell[2]
+        y2 = this_cell[3]
+        startx = min(x1, x2)
+        starty = min(y1, y2)
+        width = self.cellsize[0]
+        height = self.cellsize[1]
+        rect = patches.Rectangle((startx, starty), width, height, 
+                                 edgecolor = 'blue', linewidth = 1.0, fill = False, facecolor = None, alpha = 0.6)
+        ax.add_patch(rect)
+        rect = patches.Rectangle((startx, starty), width, height, 
+                                 edgecolor = None, linewidth = 0, fill = True, facecolor = 'blue', alpha = 0.15)
+        ax.add_patch(rect)
+        plt.title('Image %i cell %i'% (image_no, cell_no))
+        plt.show(block = False)
+    
+    def record_groundtruth(self, cell_no):
+        '''Record ground truth (True / False) for each image'''
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        for image_no in range(len(self.images_files)):
+            self.show_image_cell(image_no, cell_no, ax)
+            anom_present = raw_input("Anomaly? [t/f]: ")
+            print anom_present
+            plt.cla()
+            #plt.close('all')
 
     def _analyse_texture(self, data, bins = 16):
         '''Analyse the texture in array data.
@@ -669,6 +709,7 @@ class texture(object):
     def _onclick(self, event):
         print 'Corner selected at (%i, %i)'% (round(event.xdata), round(event.ydata)) 
         self.corners.append([event.xdata, event.ydata])
+        
 
 
 if __name__ == '__main__':
@@ -689,8 +730,12 @@ if __name__ == '__main__':
     #S.plot_clusters_textures(image_no = 0, cell_no = None, norm_data = True, pca_data = False)
     #S.plot_class_textures(image_no = 0, cell_no = None, pca_data = True)
     #S.plot_class_textures(image_no = 0, cell_no = None, norm_data = True, pca_data = False)
-    S.show_anomalies(image_no = 0)
-    S.show_anomalies(image_no = 1)
-    S.show_anomalies(image_no = 2)
-    S.show_anomalies(image_no = 3)
+#     S.show_anomalies(image_no = 0)
+#     S.show_anomalies(image_no = 1)
+#     S.show_anomalies(image_no = 2)
+#     S.show_anomalies(image_no = 3)
+    #S.show_image_cell(0, 0)
+    #S.show_image_cell(0, 1)
+    S.record_groundtruth(0)
+    
     
