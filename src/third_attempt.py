@@ -12,6 +12,7 @@ import matplotlib.colors as colors
 import matplotlib.cm as colormap
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
+from sklearn.cluster import DBSCAN
 import operator
 import os
 
@@ -282,7 +283,7 @@ class texture(object):
     
     def cluster_cells(self, image_no = None, cell_no = None, method = None, 
                       norm_data = False, centre_data = False, pca_data = False, 
-                      kmeans_k = 2):
+                      kmeans_k = 2, dbscan_eps = 2, dbscan_ms = 5):
         '''Select all cells in either image_no or cell_no and cluster using method
         self.raw_clusters - the cluster the cell is assigned to be the clusering algorithm
         self.class_results - TRUE if an anomoly, FLASE if not'''
@@ -305,11 +306,35 @@ class texture(object):
             cluster_results = kmeans.fit_predict(data)
             cluster_order = order_means(data, cluster_results)
             bin_results = cluster_results == cluster_order[-1]
-            
+        if method == 'dbscan':
+            #Run dbscan with eps = dbscan_eps and min_samples = dbscan_ms
+            #anomalies are those in cluster zero (ie no cluster)
+            dbscan = DBSCAN(eps = dbscan_eps, min_samples = dbscan_ms)
+            cluster_results = dbscan.fit_predict(data)
+            cluster_results += 1 #so that the plotting colours work
+            bin_results = cluster_results == 0
         else:
             raise exceptions.AttributeError('method %s not known.'% method)
         self.raw_clusters = cluster_results
         self.class_result = bin_results
+        return bin_results
+
+    def cluster_all_cells(self, method = None, 
+                      norm_data = False, centre_data = False, pca_data = False, 
+                      kmeans_k = 2, dbscan_eps = 2, dbscan_ms = 5):
+        '''Cluster all cells by calling cluster_cells over each of the cells
+        Save results into self.all_cell_class as matrix [n x m]
+        self.all_cell_class[n, m] gives whether image n, cell m is an anomaly'''
+        no_images = len(self.images_files)
+        master_results = np.empty((len(self.images_files), self.ncells_abs), dtype = bool)
+        #master_results[n, m] = anomaly on image n, cell m?
+        for cell_no in range(self.ncells_abs):
+            bin_results = self.cluster_cells(method = method, cell_no = cell_no, 
+                                             norm_data = norm_data, centre_data = centre_data, 
+                                             pca_data = pca_data, kmeans_k = kmeans_k, 
+                                             dbscan_eps = dbscan_eps, dbscan_ms = dbscan_ms)
+            master_results[:, cell_no] = bin_results
+        self.all_cell_class = master_results     
     
     def plot_clusters_textures(self, image_no = None, cell_no = None,
                                 norm_data = False, centre_data = False, pca_data = False):
@@ -553,6 +578,44 @@ class texture(object):
             axarr[1, 0].set_title('mean v entropy')
         plt.show()
 
+    def show_anomalies(self, image_no = 0):
+        '''Show anomalies plotted on top of image number image_no'''
+        '''Display the grid on the image'''
+        #setup the known points for finding the cell bounding boxes
+        x1 = self.initial_pixels[0][0]
+        x2 = self.initial_pixels[1][0]
+        y1 = self.initial_pixels[0][1]
+        y2 = self.initial_pixels[1][1]
+        
+        image_to_display = self.load_one_image(image_no)
+        
+        #display grid squares
+        
+        fig = plt.figure() 
+        ax = fig.add_subplot(111)
+        ax.imshow(image_to_display, cmap = 'gray')
+        anom_count = 0
+        for cell_no in range(self.ncells_abs):
+            if self.all_cell_class[image_no, cell_no]:
+                anom_count += 1
+                this_cell = self.grididx[cell_no]
+                x1 = this_cell[0]
+                y1 = this_cell[1]
+                x2 = this_cell[2]
+                y2 = this_cell[3]
+                startx = min(x1, x2)
+                starty = min(y1, y2)
+                width = self.cellsize[0]
+                height = self.cellsize[1]
+                rect = patches.Rectangle((startx, starty), width, height, 
+                                         edgecolor = 'red', linewidth = 1.0, fill = False, facecolor = None, alpha = 0.6)
+                ax.add_patch(rect)
+                rect = patches.Rectangle((startx, starty), width, height, 
+                                         edgecolor = None, linewidth = 0, fill = True, facecolor = 'red', alpha = 0.15)
+                ax.add_patch(rect)
+        plt.title('%i cells in this image are anomalous'% (anom_count))
+        plt.show()     
+
     def _analyse_texture(self, data, bins = 16):
         '''Analyse the texture in array data.
         Return vector of six numbers'''
@@ -608,68 +671,6 @@ class texture(object):
         self.corners.append([event.xdata, event.ydata])
 
 
-
-
-
-# class Datum(object):
-#     colorin = colorConverter.to_rgba('red')
-#     colorout = colorConverter.to_rgba('blue')
-# 
-#     def __init__(self, x, y, include=False):
-#         self.x = x
-#         self.y = y
-#         if include:
-#             self.color = self.colorin
-#         else:
-#             self.color = self.colorout
-# 
-# 
-# class LassoManager(object):
-#     def __init__(self, ax, data):
-#         self.axes = ax
-#         self.canvas = ax.figure.canvas
-#         self.data = data
-# 
-#         self.Nxy = len(data)
-# 
-#         facecolors = [d.color for d in data]
-#         self.xys = [(d.x, d.y) for d in data]
-#         fig = ax.figure
-#         self.collection = RegularPolyCollection(
-#             fig.dpi, 6, sizes=(100,),
-#             facecolors=facecolors,
-#             offsets=self.xys,
-#             transOffset=ax.transData)
-# 
-#         ax.add_collection(self.collection)
-# 
-#         self.cid = self.canvas.mpl_connect('button_press_event', self.onpress)
-# 
-#     def callback(self, verts):
-#         facecolors = self.collection.get_facecolors()
-#         p = path.Path(verts)
-#         ind = p.contains_points(self.xys)
-#         for i in range(len(self.xys)):
-#             if ind[i]:
-#                 facecolors[i] = Datum.colorin
-#             else:
-#                 facecolors[i] = Datum.colorout
-# 
-#         self.canvas.draw_idle()
-#         self.canvas.widgetlock.release(self.lasso)
-#         del self.lasso
-# 
-#     def onpress(self, event):
-#         if self.canvas.widgetlock.locked():
-#             return
-#         if event.inaxes is None:
-#             return
-#         self.lasso = Lasso(event.inaxes,
-#                            (event.xdata, event.ydata),
-#                            self.callback)
-#         # acquire a lock on the widget drawing
-#         self.canvas.widgetlock(self.lasso)
-
 if __name__ == '__main__':
     S = texture(r'/Users/james/blog/20150918_republicanPCA/cropped_images')
     #S.select_grid_corners()
@@ -681,9 +682,15 @@ if __name__ == '__main__':
     #cell = S._getdata(2)
     #S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = True, centre_data = True, pca_data = True)
     #S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = False, centre_data = True, pca_data = False)
-    S.cluster_cells(image_no = 0, cell_no = None, norm_data = True, method = 'kmeans', kmeans_k = 2 )
+    #S.cluster_cells(image_no = 0, cell_no = None, norm_data = True, method = 'dbscan', kmeans_k = 2 )
+    S.cluster_all_cells(method = 'dbscan', norm_data = True, centre_data = True, pca_data = False, 
+                        dbscan_eps = 1.5, dbscan_ms = 5)
     #S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = True)
-    S.plot_clusters_textures(image_no = 0, cell_no = None, norm_data = True, pca_data = False)
+    #S.plot_clusters_textures(image_no = 0, cell_no = None, norm_data = True, pca_data = False)
     #S.plot_class_textures(image_no = 0, cell_no = None, pca_data = True)
-    S.plot_class_textures(image_no = 0, cell_no = None, norm_data = True, pca_data = False)
+    #S.plot_class_textures(image_no = 0, cell_no = None, norm_data = True, pca_data = False)
+    S.show_anomalies(image_no = 0)
+    S.show_anomalies(image_no = 1)
+    S.show_anomalies(image_no = 2)
+    S.show_anomalies(image_no = 3)
     
