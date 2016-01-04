@@ -590,7 +590,7 @@ class texture(object):
         image_to_display = self.load_one_image(image_no)
         
         #display grid squares
-        
+   
         fig = plt.figure() 
         ax = fig.add_subplot(111)
         ax.imshow(image_to_display, cmap = 'gray')
@@ -616,7 +616,7 @@ class texture(object):
         plt.title('%i cells in this image are anomalous'% (anom_count))
         plt.show()  
     
-    def show_image_cell(self, image_no, cell_no, ax):
+    def show_image_cell(self, image_no, cell_no):
         '''Show image number image_no with cell number cell_no highlighted'''
         #setup the known points for finding the cell bounding boxes
         
@@ -624,8 +624,8 @@ class texture(object):
         
         #display grid squares
         
-         
-        #ax = fig.add_subplot(111)
+        fig = plt.figure()        
+        ax = fig.add_subplot(111)
         ax.imshow(image_to_display, cmap = 'gray')
         this_cell = self.grididx[cell_no]
         x1 = this_cell[0]
@@ -643,18 +643,16 @@ class texture(object):
                                  edgecolor = None, linewidth = 0, fill = True, facecolor = 'blue', alpha = 0.15)
         ax.add_patch(rect)
         plt.title('Image %i cell %i'% (image_no, cell_no))
-        plt.show(block = False)
+        plt.show()
     
     def record_groundtruth(self, cell_no):
         '''Record ground truth (True / False) for each image'''
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
+
         for image_no in range(len(self.images_files)):
-            self.show_image_cell(image_no, cell_no, ax)
+            self.show_image_cell(image_no, cell_no)
             anom_present = raw_input("Anomaly? [t/f]: ")
             print anom_present
-            plt.cla()
-            #plt.close('all')
+            raise exceptions.NotImplementedError('Record the Ground Truth')
 
     def _analyse_texture(self, data, bins = 16):
         '''Analyse the texture in array data.
