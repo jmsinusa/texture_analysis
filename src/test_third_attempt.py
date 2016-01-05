@@ -94,7 +94,21 @@ class Test(unittest.TestCase):
         for ii in range(out.shape[0]):
             for jj in range(out.shape[1]):
                 self.assertEqual(out[ii, jj], desired[ii, jj])        
-        
+    
+    def test_compare2bool(self):
+        '''Compare two boolean matrixes'''
+        ar = np.array([[True, False, True, False], [False, True, False, True]])
+        gt = np.array([[False, False, True, False], [True, True, False, False]])
+        d1 = 2
+        d2 = 2
+        d3 = 1
+        d4 = 3
+        (o1, o2, o3, o4) = sa.compare_2bool(ar, gt)
+        self.assertEqual(d1, o1)
+        self.assertEqual(d2, o2)
+        self.assertEqual(d3, o3)
+        self.assertEqual(d4, o4)
+    
 
 
 if __name__ == "__main__":

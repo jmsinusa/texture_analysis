@@ -95,6 +95,20 @@ def quantise_data(data, bins):
     data = data * (original_max - original_min) + original_min
     return data
 
+def compare_2bool(ar, gt):
+    '''Compare ar1 and gt, each 2D numpy boolean arrays.
+    Return the number of True positives (ar = True when gt = True),
+    false_positives (ar = True when gt = False)
+    true_negatives (ar = False when gt = False)
+    false_negatives (ar = False when gt = True)
+    Returns: (true_pos, false_pos, false_neg, true_neg)'''
+    true_pos = np.sum(np.logical_and(ar, gt))
+    false_pos = np.sum(np.logical_and(ar, np.logical_not(gt)))
+    false_neg = np.sum(np.logical_and(np.logical_not(ar), gt))
+    true_neg = np.sum(np.logical_and(np.logical_not(ar), np.logical_not(gt)))
+    return (true_pos, false_pos, false_neg, true_neg)
+    
+
 class texture(object):
     '''
     Create grids and conduct texture analysis
@@ -786,6 +800,20 @@ class texture(object):
         gt_matrix = np.load(outfile)
         self.gt_matrix = gt_matrix
         print 'Ground truth self.gt_matrix loaded from file %s'% outfile
+    
+    def compare_res_gt(self):
+        '''Compare clustering results with ground truth'''
+        
+        (true_pos, false_pos, false_neg, true_neg) = compare_2bool(self.all_cell_class, self.gt_matrix)
+        
+        print 'True positives: %i %6.4f\%'% (true_pos,  (true_pos / (true_pos + false_neg)) * 100)
+        print 'False positives: %i %6.4f\%'% (false_pos,  (false_pos / (true_pos + false_pos)) * 100)
+        print 'False negatives: %i %6.4f\%'% (false_neg, (false_neg / (false_neg + true_neg)) * 100)
+        print 'True negatives: %i %6.4f\%'% (true_neg, (true_neg / (true_neg + false_pos)) * 100)
+        
+    def compare_res_gt_bycell(self):
+        '''Loop through each cell and output results'''
+        pass
 
     def _analyse_texture(self, data, bins = 16):
         '''Analyse the texture in array data.
