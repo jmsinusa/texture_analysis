@@ -84,6 +84,17 @@ class Test(unittest.TestCase):
         for ii in range(out.shape[0]):
             for jj in range(out.shape[1]):
                 self.assertAlmostEqual(out[ii, jj], desired[ii, jj])
+    
+    def test_quantise_data(self):
+        '''Quantise'''
+        data = np.array([[1, 2, 3, 4, 5, 6], [2, 3, 4, 5, 6, 1]])
+        bins = 3
+        desired = np.array([[1, 1, 3.5, 3.5, 6, 6], [1, 3.5, 3.5, 6, 6, 1]])
+        out = sa.quantise_data(data, bins)
+        for ii in range(out.shape[0]):
+            for jj in range(out.shape[1]):
+                self.assertEqual(out[ii, jj], desired[ii, jj])        
+        
 
 
 if __name__ == "__main__":

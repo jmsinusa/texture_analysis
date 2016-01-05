@@ -76,12 +76,31 @@ def order_means(data, cluster_nos):
         sorted_cluster_nos.append(item[0])
     return sorted_cluster_nos
 
+def quantise_data(data, bins):
+    '''Quantise numpy array data into bins number of bins'''
+    data = data.astype(float)
+    original_min = np.amin(data)
+    original_max = np.amax(data)
+    #remove offset
+    data = data - np.amin(data)
+    #scale to one
+    data = data / np.amax(data)
+    #multiply by number of bins - 1
+    data = data * (bins - 1)
+    #round to integer
+    data = np.around(data, decimals = 0)
+    #scale to one
+    data = data / np.amax(data)
+    #scale to original size
+    data = data * (original_max - original_min) + original_min
+    return data
+
 class texture(object):
     '''
     Create grids and conduct texture analysis
     '''
 
-    def __init__(self, images_dir):
+    def __init__(self, images_dir, gt_dir = r'/Users/james/blog/20150918_republicanPCA/gt_dir'):
         '''
         Constructor
         '''
@@ -89,14 +108,18 @@ class texture(object):
         #Check it's a directory first!
         if not os.path.isdir(images_dir):
             raise exceptions.IOError('Input %s must be a directory' %images_dir)
+        if not os.path.isdir(gt_dir):
+            raise exceptions.IOError('Input %s must be a directory' %gt_dir)
         files = os.listdir(images_dir)
         files.remove('.DS_Store')
         self.images_dir = images_dir
         self.images_files = files
+        self.gt_dir = gt_dir
         #Read in first image
         self.raw_img = self.load_one_image()
         self.data_shape = self.raw_img.shape
         self.corners = []
+        
     
     def load_one_image(self, imageno = 0, filename = None):
         '''Load one image to use for grid building.
@@ -138,6 +161,7 @@ class texture(object):
         print "  Ground Truth mode.\nGT %s corner positions loaded:"% gt_option
         for cc in self.corners:
             print "    Corner (%6.2f, %6.2f)" % (cc[0], cc[1])
+        self.gt_option = gt_option
     
     def create_grid(self, xpixels = 8, ypixels = 8):
         '''Create a grid, using self.corners, of size xpixels, ypixels.
@@ -181,6 +205,38 @@ class texture(object):
         self.gridxvals, self.gridyvals = create_grid(rounded_pixels[0], rounded_pixels[1], ncells)
         self.grididx = create_grid_idx(self.gridxvals, self.gridyvals, ncells)
         
+        #Create empty logical array for later groundtruthing
+        self.gt_matrix = np.empty((len(self.images_files), self.ncells_abs), dtype = bool)
+    
+    def pixels_to_cellno(self, x, y):
+        '''Convert a given x,y into a cell number'''
+        #1. Check that x and y are within the bounds of the cell
+        if x < min(self.gridxvals):
+            raise exceptions.IOError('This point is outside of the grid')
+        if x > max(self.gridxvals):
+            raise exceptions.IOError('This point is outside of the grid')
+        if y < min(self.gridyvals):
+            raise exceptions.IOError('This point is outside of the grid')
+        if y > max(self.gridyvals):
+            raise exceptions.IOError('This point is outside of the grid')
+        
+        #2. Find the appropriate cell index
+        xbig = min(self.gridxvals[self.gridxvals > x])
+        xsmall = max(self.gridxvals[self.gridxvals < x])
+        ybig = min(self.gridyvals[self.gridyvals > y])
+        ysmall = max(self.gridyvals[self.gridyvals < y])
+        
+        if self.ncells[0] > 0:
+            xpos = np.where(self.gridxvals == xsmall)[0]
+        elif self.ncells[0] < 0:
+            xpos = np.where(self.gridxvals == xbig)[0]
+        if self.ncells[1] > 0:
+            ypos = np.where(self.gridyvals == ysmall)[0]
+        elif self.ncells[1] < 0:
+            ypos = np.where(self.gridyvals == ybig)[0]
+        cell_no = ypos * abs(self.ncells[0]) + xpos
+        return int(cell_no)
+    
     def display_grid(self, showarea = True):
         '''Display the grid on the image'''
         #setup the known points for finding the cell bounding boxes
@@ -229,7 +285,26 @@ class texture(object):
                                      edgecolor = 'black', linewidth = 0.5, facecolor = colours[cell_no])
             ax.add_patch(rect)
         plt.title('%i cells, each %i x %i pixels'% (self.ncells_abs, self.cellsize[0], self.cellsize[1]))
-        plt.show()     
+        plt.show()
+
+    def display_bitdepth_image(self, image_no, bins = 16):
+        '''Display an image using only bins number of bins'''
+        try:
+            assert(bins > 1)
+        except AssertionError:
+            print 'The number of bins must be greater than one.'
+        
+        image = self.load_one_image(image_no)
+        
+        #Reduce depth
+        image_to_display = quantise_data(image, bins)
+        
+        #display
+        fig = plt.figure()        
+        ax = fig.add_subplot(111)
+        ax.imshow(image_to_display, cmap = 'gray')
+        plt.title('Image %i number of bins %i'% (image_no, bins))
+        plt.show() 
     
     def measure_all_textures(self, bins = 16):
         '''Loop through all images and measure textures'''
@@ -645,14 +720,72 @@ class texture(object):
         plt.title('Image %i cell %i'% (image_no, cell_no))
         plt.show()
     
-    def record_groundtruth(self, cell_no):
+    def record_all_groundtruth(self):
         '''Record ground truth (True / False) for each image'''
-
+        #record ground truth in self.gt_matrix[image_no, cell_no] = True if anomaly
         for image_no in range(len(self.images_files)):
-            self.show_image_cell(image_no, cell_no)
-            anom_present = raw_input("Anomaly? [t/f]: ")
-            print anom_present
-            raise exceptions.NotImplementedError('Record the Ground Truth')
+            self.gt_image(image_no)
+
+    def gt_image(self, image_no):
+        '''Display the grid on the image, allow points to be selected'''
+        #record ground truth in self.gt_matrix[image_no, cell_no] = True if anomaly
+        self.gt_cells = [] #empty list for storing ground truth points
+        #display grid squares
+        image_to_display = self.load_one_image(image_no)
+        
+        fig = plt.figure() 
+        ax = fig.add_subplot(111)
+        ax.imshow(image_to_display, cmap = 'gray')
+        for cell_no in range(self.ncells_abs):
+
+            this_cell = self.grididx[cell_no]
+            x1 = this_cell[0]
+            y1 = this_cell[1]
+            x2 = this_cell[2]
+            y2 = this_cell[3]
+            startx = min(x1, x2)
+            starty = min(y1, y2)
+            width = self.cellsize[0]
+            height = self.cellsize[1]
+            rect = patches.Rectangle((startx, starty), width, height, 
+                                     edgecolor = 'red', linewidth = 1.0, fill = False, facecolor = None, alpha = 0.6)
+            ax.add_patch(rect)
+            
+            rect = patches.Rectangle((startx, starty), width, height, 
+                                     edgecolor = None, linewidth = 0, fill = True, facecolor = 'red', alpha = 0.15)
+            ax.add_patch(rect)
+
+        plt.title('Select cells that contain activity')
+        cid = fig.canvas.mpl_connect('button_press_event', self._gt_onclick)
+        plt.show()  
+        fig.canvas.mpl_disconnect(cid)
+        print 'GT setup: Activity recorded for image %i in %i cells: '% (image_no, len(self.gt_cells))
+        print self.gt_cells
+        gt_cells_selected = np.unique(np.array(self.gt_cells))
+        if gt_cells_selected.any():
+            self.gt_matrix[image_no, gt_cells_selected] = True
+        #print self.gt_matrix[image_no, :]
+
+    def save_gt_matrix(self):
+        '''Save the gt_matrix to disk'''
+        dir_ = self.gt_dir
+        if not self.gt_option:
+            raise exceptions.IOError('gt_option was not set during the selection of the corners.')
+        gt_num = self.gt_option
+        gtfile = 'gt_matrix_gt_option%s' %gt_num
+        outfile = dir_ + os.sep + gtfile
+        np.save(outfile, self.gt_matrix)
+        print 'Ground truth self.gt_matrix saved to file %s'% outfile
+    
+    def load_gt_matrix(self, gt_option):
+        '''Load the gt_matrix file and set self.gt_option'''
+        dir_ = self.gt_dir
+        self.gt_option = gt_option
+        gtfile = 'gt_matrix_gt_option%s.npy' %gt_option
+        outfile = dir_ + os.sep + gtfile
+        gt_matrix = np.load(outfile)
+        self.gt_matrix = gt_matrix
+        print 'Ground truth self.gt_matrix loaded from file %s'% outfile
 
     def _analyse_texture(self, data, bins = 16):
         '''Analyse the texture in array data.
@@ -707,23 +840,36 @@ class texture(object):
     def _onclick(self, event):
         print 'Corner selected at (%i, %i)'% (round(event.xdata), round(event.ydata)) 
         self.corners.append([event.xdata, event.ydata])
-        
+
+    def _gt_onclick(self, event):
+        #print 'Point selected at (%i, %i)'% (round(event.xdata), round(event.ydata)) 
+        try:
+            cell_selected = self.pixels_to_cellno(event.xdata, event.ydata)
+        except exceptions.IOError:
+            print "You must click one of the cells."
+        else:
+            print 'Cell %i selected'% cell_selected
+            self.gt_cells.append(cell_selected)        
 
 
 if __name__ == '__main__':
     S = texture(r'/Users/james/blog/20150918_republicanPCA/cropped_images')
     #S.select_grid_corners()
-    S.groundtruth_select_corners(gt_option = 1)
-    S.create_grid(xpixels = 80, ypixels = 80)
+    S.display_bitdepth_image(0, bins = 256)
+    S.display_bitdepth_image(0, bins = 16)
+    S.display_bitdepth_image(0, bins = 12)
+    #S.groundtruth_select_corners(gt_option = 1)
+    #S.create_grid(xpixels = 80, ypixels = 80)
+    #S.load_gt_matrix(1)
     #S.display_grid(showarea = False)
-    
-    S.measure_all_textures(bins = 16)
+    #S.pixels_to_cellno(400, 400)
+    #S.measure_all_textures(bins = 16)
     #cell = S._getdata(2)
     #S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = True, centre_data = True, pca_data = True)
     #S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = False, centre_data = True, pca_data = False)
     #S.cluster_cells(image_no = 0, cell_no = None, norm_data = True, method = 'dbscan', kmeans_k = 2 )
-    S.cluster_all_cells(method = 'dbscan', norm_data = True, centre_data = True, pca_data = False, 
-                        dbscan_eps = 1.5, dbscan_ms = 5)
+    #S.cluster_all_cells(method = 'dbscan', norm_data = True, centre_data = True, pca_data = False, 
+    #                    dbscan_eps = 1.5, dbscan_ms = 5)
     #S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = True)
     #S.plot_clusters_textures(image_no = 0, cell_no = None, norm_data = True, pca_data = False)
     #S.plot_class_textures(image_no = 0, cell_no = None, pca_data = True)
@@ -732,8 +878,16 @@ if __name__ == '__main__':
 #     S.show_anomalies(image_no = 1)
 #     S.show_anomalies(image_no = 2)
 #     S.show_anomalies(image_no = 3)
-    #S.show_image_cell(0, 0)
-    #S.show_image_cell(0, 1)
-    S.record_groundtruth(0)
+#     S.show_image_cell(0, 0)
+#     S.show_image_cell(0, 1)
+#     S.show_image_cell(0, 2)
+#     S.show_image_cell(0, 3)
+#     S.show_image_cell(0, 4)
+#     S.show_image_cell(0, 5)
+#     S.show_image_cell(0, 6)
+
+    #S.gt_image(0)
+#    S.record_all_groundtruth()
+    #S.save_gt_matrix()
     
     
