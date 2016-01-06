@@ -108,6 +108,24 @@ def compare_2bool(ar, gt):
     true_neg = np.sum(np.logical_and(np.logical_not(ar), np.logical_not(gt)))
     return (true_pos, false_pos, false_neg, true_neg)
     
+def print_detection_rates(true_pos, false_pos, false_neg, true_neg):
+    '''Loop through each cell and output results'''
+    print 'Number of detections:'
+    print 'True positives:      %5i'% true_pos
+    print 'False positives:     %5i'% false_pos
+    print 'False negatives:     %5i'% false_neg
+    print 'True negatives:      %5i'% true_neg
+    print ' '
+    true_pos = float(true_pos)
+    false_pos = float(false_pos)
+    false_neg = float(false_neg)
+    true_neg = float(true_neg)
+    detection_rate = 100 * true_pos / (true_pos + false_neg)
+    falsealarm_rate = 100 * false_pos / (false_pos + true_neg)
+    misseddet_rate = 100 * false_neg / (true_pos + false_neg)
+    print 'Detection rate:         %4.2f%%' %detection_rate
+    print 'False alarm rate:       %4.2f%%' %falsealarm_rate
+    print 'Missed detections rate: %4.2f%%' %misseddet_rate
 
 class texture(object):
     '''
@@ -145,11 +163,12 @@ class texture(object):
         image_data = read_jpg(filepath)
         return image_data
            
-    def select_grid_corners(self):
+    def select_grid_corners(self, verbose = False):
         '''Select the SW and NE corners of a box
         return [[x1,y1,xdata1,ydata1], [x2,y2,xdata2,ydata2]]
         x,y: positions on graph
-        xdata,ydata: postitions in data matrix'''
+        xdata,ydata: postitions in data matrix
+        If verbose print the corners, for use in the ground truth'''
         contin = True
         while contin == True:
             if len(self.corners) > 2:
@@ -165,11 +184,14 @@ class texture(object):
             if done:
                 contin = False
             fig.canvas.mpl_disconnect(cid)
+        if verbose:
+            print self.corners
         
     def groundtruth_select_corners(self, gt_option = 1):
         '''Load the corners used for ground truthing'''
         if gt_option == 1:
-            self.corners = [[65.833333333333371, 958.79166666666674], [542.5, 374.875]]
+            self.corners = [[15.645833333333485, 1090.90625], [766.16666666666663, 42.468750000000227]]
+            print 'GROUND TRUTH %s. Cells must be set to 40 x 40'% gt_option
         else:
             raise exceptions.NotImplementedError('The selected gt option (%s) has not been implemented'% gt_option)
         print "  Ground Truth mode.\nGT %s corner positions loaded:"% gt_option
@@ -180,6 +202,15 @@ class texture(object):
     def create_grid(self, xpixels = 8, ypixels = 8):
         '''Create a grid, using self.corners, of size xpixels, ypixels.
         Report number of cells. Expand in x and y direction to ensure integer numer of cells.'''
+        try:
+            assert xpixels > 0
+            assert ypixels > 0
+        except AssertionError:
+            print 'Both xpixels and ypixels must be integers greater than zero.'
+            print 'Defaults (8, 8) have been restored.'
+            xpixels = 8
+            ypixels = 8
+        
         print "Creating grid of cells, each (%i, %i) pixels"% (xpixels, ypixels)
         self.cellsize = np.array((xpixels, ypixels))
         
@@ -320,7 +351,7 @@ class texture(object):
         plt.title('Image %i number of bins %i'% (image_no, bins))
         plt.show() 
     
-    def measure_all_textures(self, bins = 16):
+    def measure_all_textures(self, bins = 16, verbose = False):
         '''Loop through all images and measure textures'''
         n_images = len(self.images_files)
         all_texture = np.empty((n_images, self.ncells_abs, 6))
@@ -332,6 +363,9 @@ class texture(object):
             assert image_data.shape == self.data_shape
             texture = self.measure_texture(image_data, bins = bins)
             all_texture[ii, :, :] = texture
+            if verbose:
+                if ii % 20 == 0:
+                    print '  Textures calculated for %i of %i images'% (ii, n_images)
             ii += 1
         #print all_texture[0,] #first image, all cells
         #print all_texture[:,0,] #all images, first cell 
@@ -368,34 +402,62 @@ class texture(object):
         if pca_data:
             pca = PCA()
             data = pca.fit_transform(data)
-        return data        
+        return data
+
+    def _select_all_images_cells_data(self, 
+                                   norm_data = False, centre_data = False, pca_data = False):
+        '''Select six-dimensional data from all images and cells
+        centre_data: subtract mean from each dimension
+        norm_data: divide each dimension by its standard deviation
+        retrun data: numpy matrix ncells x 6'''
+        data = self.all_textures[0, :, :]
+        for image_no in range(1, len(self.images_files)):
+            newdata = self.all_textures[image_no, :, :]
+            data = np.append(data, newdata, axis = 0)
+        if centre_data:
+            data = calc_centre_data(data)
+        if norm_data:
+            data = calc_norm_data(data)
+        if pca_data:
+            pca = PCA()
+            data = pca.fit_transform(data)
+        return data       
     
-    def cluster_cells(self, image_no = None, cell_no = None, method = None, 
+    def cluster_cells(self, image_no = None, cell_no = None, all_at_once = False, method = None, 
                       norm_data = False, centre_data = False, pca_data = False, 
                       kmeans_k = 2, dbscan_eps = 2, dbscan_ms = 5):
         '''Select all cells in either image_no or cell_no and cluster using method
         self.raw_clusters - the cluster the cell is assigned to be the clusering algorithm
-        self.class_results - TRUE if an anomoly, FLASE if not'''
+        self.class_results - TRUE if an anomoly, FLASE if not
+        If all_at_once is true, cluster all cells for all images in one go,
+            and save results straight to self.all_cell_class and self.all_cell_cluster'''
         #1. Select the relevant data
-        data = self._select_image_or_cell_data(image_no = image_no, cell_no = cell_no, 
-                                               norm_data = norm_data, centre_data = centre_data, pca_data = pca_data)
+        if all_at_once:
+            data = self._select_all_images_cells_data(norm_data = norm_data, 
+                                                      centre_data = centre_data, 
+                                                      pca_data = pca_data)
+
+        else:
+            data = self._select_image_or_cell_data(image_no = image_no, cell_no = cell_no, 
+                                               norm_data = norm_data, centre_data = centre_data, 
+                                               pca_data = pca_data)
         #2. cluster
         if method == 'rand':
             #Randomly assign points to clusters 0 to 5.
             #Anomalies are clusters 3, 4, 5
             cluster_results = np.random.randint(0, high = 6, size = data.shape[0])
             bin_results = cluster_results >= 3
-        if method == 'manual':
+        elif method == 'manual':
             #Manually select points that are anomalies. Anomalies are in cluster 1
             exceptions.NotImplementedError('Not implemented on mac due to mac specific error.')
-        if method == 'kmeans':
+        elif method == 'kmeans':
             #Run k-means with k = kmeans_k and hope for the best
             #The cluster with the highest mean is taken as anomalous 
             kmeans = KMeans(n_clusters = kmeans_k, n_init = 30)
             cluster_results = kmeans.fit_predict(data)
             cluster_order = order_means(data, cluster_results)
             bin_results = cluster_results == cluster_order[-1]
-        if method == 'dbscan':
+        elif method == 'dbscan':
             #Run dbscan with eps = dbscan_eps and min_samples = dbscan_ms
             #anomalies are those in cluster zero (ie no cluster)
             dbscan = DBSCAN(eps = dbscan_eps, min_samples = dbscan_ms)
@@ -406,6 +468,21 @@ class texture(object):
             raise exceptions.AttributeError('method %s not known.'% method)
         self.raw_clusters = cluster_results
         self.class_result = bin_results
+        
+        if all_at_once:
+            #save results to self.all_cell_class and self.all_cell_clusters
+            #format self.all_cell_class[image_no, cell_no]
+            all_cell_class = np.empty((len(self.images_files), self.ncells_abs), dtype = bool)
+            all_cell_clusters = np.empty((len(self.images_files), self.ncells_abs), dtype = int)
+            for image_no in range(len(self.images_files)):
+                start = image_no * self.ncells_abs
+                end = (image_no + 1) * self.ncells_abs
+                all_cell_class[image_no, :] = bin_results[start:end]
+                all_cell_clusters[image_no, :] = cluster_results[start:end]
+                
+            self.all_cell_class = all_cell_class
+            self.all_cell_clusters = all_cell_clusters
+        
         return bin_results
 
     def cluster_all_cells(self, method = None, 
@@ -425,16 +502,23 @@ class texture(object):
             master_results[:, cell_no] = bin_results
         self.all_cell_class = master_results     
     
-    def plot_clusters_textures(self, image_no = None, cell_no = None,
+    def plot_clusters_textures(self, image_no = None, cell_no = None, all_at_once = False,
                                 norm_data = False, centre_data = False, pca_data = False):
         '''Plot the texture results for either an image or a cell,
         coloured by the cluster numbers from self.raw_clusters'''
         #1. Select the relevant data
-        data = self._select_image_or_cell_data(image_no = image_no, cell_no = cell_no, 
-                                               norm_data = norm_data, centre_data = centre_data, pca_data = pca_data)
+        if all_at_once:
+            data = self._select_all_images_cells_data(norm_data = norm_data, 
+                                                      centre_data = centre_data, 
+                                                      pca_data = pca_data)
+        else:
+            data = self._select_image_or_cell_data(image_no = image_no, cell_no = cell_no, 
+                                               norm_data = norm_data, centre_data = centre_data, 
+                                               pca_data = pca_data)
+                
         cluster_indx = np.unique(self.raw_clusters)
-        print "DEBUG"
-        print cluster_indx
+        if len(cluster_indx) > 100:
+            raise exceptions.RuntimeError('%i clusters have been produced'% len(cluster_indx))
         #2. Set colour palate
         plt_alpha = 1.0
         colourmap = get_cmap(len(cluster_indx) + 1)
@@ -442,7 +526,7 @@ class texture(object):
         #colourindexes = np.random.choice(cluster_indx, size = len(cell_indexes), replace = False)
         colourindexes = cluster_indx
         colours = colourmap.to_rgba(colourindexes, alpha = plt_alpha)
-        print colours
+        #print colours
         #2. Plot each cluster
         # Do some plotting
         
@@ -623,12 +707,18 @@ class texture(object):
 
         plt.show()
         
-    def plot_raw_textures(self, image_no = None, cell_no = None, 
+    def plot_raw_textures(self, image_no = None, cell_no = None, all_at_once = False,
                           norm_data = False, centre_data = False, pca_data = False):
         '''Plot the texture results for either an image or a cell'''
         #1. Select the relevant data
-        data = self._select_image_or_cell_data(image_no = image_no, cell_no = cell_no, 
-                                               norm_data = norm_data, centre_data = centre_data, pca_data = pca_data)
+        if all_at_once:
+            data = self._select_all_images_cells_data(norm_data = norm_data, 
+                                                      centre_data = centre_data, 
+                                                      pca_data = pca_data)
+        else:
+            data = self._select_image_or_cell_data(image_no = image_no, cell_no = cell_no, 
+                                               norm_data = norm_data, centre_data = centre_data, 
+                                               pca_data = pca_data)
         mean = data[:, 0]
         sd = data[:, 1]
         smoothness = data[:, 2]
@@ -704,6 +794,70 @@ class texture(object):
                 ax.add_patch(rect)
         plt.title('%i cells in this image are anomalous'% (anom_count))
         plt.show()  
+
+    def show_clusters_allatonce(self, image_no):
+        '''Display the original clusters on all images'''
+        n_clusters = len(np.unique(self.all_cell_clusters))
+        image_to_display = self.load_one_image(image_no)
+        #create a colourmap
+        plt_alpha = 0.2
+        colourmap = get_cmap(n_clusters)
+        colourindexes = range(n_clusters)
+        colours = colourmap.to_rgba(colourindexes, alpha = plt_alpha)
+        
+        #display grid squares
+        
+        fig = plt.figure() 
+        ax = fig.add_subplot(111)
+        ax.imshow(image_to_display, cmap = 'gray')
+        for cell_no in range(self.ncells_abs):
+            this_cell = self.grididx[cell_no]
+            x1 = this_cell[0]
+            y1 = this_cell[1]
+            x2 = this_cell[2]
+            y2 = this_cell[3]
+            startx = min(x1, x2)
+            starty = min(y1, y2)
+            width = self.cellsize[0]
+            height = self.cellsize[1]
+            rect = patches.Rectangle((startx, starty), width, height, 
+                                     edgecolor = 'black', linewidth = 0.1, facecolor = colours[self.all_cell_clusters[image_no, cell_no]])
+            ax.add_patch(rect)
+        plt.title('%i cells, each %i x %i pixels'% (self.ncells_abs, self.cellsize[0], self.cellsize[1]))
+        plt.show()
+
+    def show_clusters_oneimage(self, image_no):
+        '''Display the original clusters on all images'''
+        n_clusters = len(np.unique(self.raw_clusters))
+        
+        image_to_display = self.load_one_image(image_no)
+        
+        #create a colourmap
+        plt_alpha = 0.4
+        colourmap = get_cmap(n_clusters)
+        colourindexes = range(n_clusters)
+        colours = colourmap.to_rgba(colourindexes, alpha = plt_alpha)
+        
+        #display grid squares
+        
+        fig = plt.figure() 
+        ax = fig.add_subplot(111)
+        ax.imshow(image_to_display, cmap = 'gray')
+        for cell_no in range(self.ncells_abs):
+            this_cell = self.grididx[cell_no]
+            x1 = this_cell[0]
+            y1 = this_cell[1]
+            x2 = this_cell[2]
+            y2 = this_cell[3]
+            startx = min(x1, x2)
+            starty = min(y1, y2)
+            width = self.cellsize[0]
+            height = self.cellsize[1]
+            rect = patches.Rectangle((startx, starty), width, height, 
+                                     edgecolor = 'black', linewidth = 0.5, facecolor = colours[self.raw_clusters[cell_no]])
+            ax.add_patch(rect)
+        plt.title('%i cells, each %i x %i pixels'% (self.ncells_abs, self.cellsize[0], self.cellsize[1]))
+        plt.show()
     
     def show_image_cell(self, image_no, cell_no):
         '''Show image number image_no with cell number cell_no highlighted'''
@@ -800,20 +954,29 @@ class texture(object):
         gt_matrix = np.load(outfile)
         self.gt_matrix = gt_matrix
         print 'Ground truth self.gt_matrix loaded from file %s'% outfile
+        try:
+            assert self.gt_matrix.shape[0] == len(self.images_files)
+        except AssertionError:
+            print 'The number of files in the image directory does not match the number when the ground truth file was created.'
+        try:
+            assert self.gt_matrix.shape[1] == self.ncells_abs
+        except AssertionError:
+            print ('The number of cells (%i) does not match the '
+                   'number when the ground truth file was created (%i).'% (self.ncells_abs, self.gt_matrix.shape[1]))
     
-    def compare_res_gt(self):
+    def compare_res_gt(self, by_cell = False):
         '''Compare clustering results with ground truth'''
+        if by_cell:
+            for cell_no in range(self.ncells_abs):
+                (true_pos, false_pos, false_neg, true_neg) = compare_2bool(self.all_cell_class[:, cell_no], 
+                                                                           self.gt_matrix[:, cell_no])
+                print 'Cell %i'% cell_no
+                print_detection_rates(true_pos, false_pos, false_neg, true_neg)
+        else:
+            (true_pos, false_pos, false_neg, true_neg) = compare_2bool(self.all_cell_class, self.gt_matrix)
+            print_detection_rates(true_pos, false_pos, false_neg, true_neg)
         
-        (true_pos, false_pos, false_neg, true_neg) = compare_2bool(self.all_cell_class, self.gt_matrix)
-        
-        print 'True positives: %i %6.4f\%'% (true_pos,  (true_pos / (true_pos + false_neg)) * 100)
-        print 'False positives: %i %6.4f\%'% (false_pos,  (false_pos / (true_pos + false_pos)) * 100)
-        print 'False negatives: %i %6.4f\%'% (false_neg, (false_neg / (false_neg + true_neg)) * 100)
-        print 'True negatives: %i %6.4f\%'% (true_neg, (true_neg / (true_neg + false_pos)) * 100)
-        
-    def compare_res_gt_bycell(self):
-        '''Loop through each cell and output results'''
-        pass
+
 
     def _analyse_texture(self, data, bins = 16):
         '''Analyse the texture in array data.
@@ -882,30 +1045,72 @@ class texture(object):
 
 if __name__ == '__main__':
     S = texture(r'/Users/james/blog/20150918_republicanPCA/cropped_images')
-    #S.select_grid_corners()
-    S.display_bitdepth_image(0, bins = 256)
-    S.display_bitdepth_image(0, bins = 16)
-    S.display_bitdepth_image(0, bins = 12)
-    #S.groundtruth_select_corners(gt_option = 1)
-    #S.create_grid(xpixels = 80, ypixels = 80)
-    #S.load_gt_matrix(1)
+    #Display an image using 12 levels
+    #S.display_bitdepth_image(0, bins = 12)
+    S.display_bitdepth_image(0, bins = 3)
+    S.display_bitdepth_image(0, bins = 4)
+    S.display_bitdepth_image(0, bins = 5)
+    S.display_bitdepth_image(0, bins = 6)
+    S.display_bitdepth_image(0, bins = 7)
+    
+    #Select the corners to be used for our grid
+    #S.select_grid_corners(verbose = True)
+    
+    #Alternatively load these corners
+    S.groundtruth_select_corners(gt_option = 1)
+    
+    #Create the grid that you've just defined
+    S.create_grid(xpixels = 40, ypixels = 40)
+    
+    #Display the grid you have just created
     #S.display_grid(showarea = False)
-    #S.pixels_to_cellno(400, 400)
-    #S.measure_all_textures(bins = 16)
-    #cell = S._getdata(2)
-    #S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = True, centre_data = True, pca_data = True)
+    
+    #Measure all of the textures in all of the images at the number of levels given
+    S.measure_all_textures(bins = 12, verbose = True)
+    
+    #Show the raw textures for cell one
+    #S.plot_raw_textures(image_no = None, cell_no = 1, all_at_once = False, norm_data = True, centre_data = True, pca_data = True)
+    #Show the raw textures for all cells for all images at once
+    #S.plot_raw_textures(all_at_once = True, norm_data = False, centre_data = False, pca_data = True)
+    #S.plot_raw_textures(all_at_once = True, norm_data = False, centre_data = False, pca_data = False)
+    #Show the raw textures for all cells in image zero.
     #S.plot_raw_textures(image_no = 0, cell_no = None, norm_data = False, centre_data = True, pca_data = False)
-    #S.cluster_cells(image_no = 0, cell_no = None, norm_data = True, method = 'dbscan', kmeans_k = 2 )
+    
+    #Cluster the cells
+    #Cluster just image 0 using kmeans
+    #S.cluster_cells(image_no = 0, cell_no = None, norm_data = False, method = 'kmeans', kmeans_k = 2)
+    #Plot the results
+    #S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = False)
+    
+    #Cluster just image 0 using dbscan
+    #S.cluster_cells(image_no = 0, cell_no = None, norm_data = False, pca_data = True, method = 'dbscan', dbscan_eps = 3, dbscan_ms = 5)
+    #S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = True)
+    #S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = False)
+    
+    #Cluster all cells at once using dbscan
+    S.cluster_cells(all_at_once = True, norm_data = False, centre_data = False, pca_data = True, method = 'dbscan', dbscan_eps = 4, dbscan_ms = 8)  
+    S.plot_clusters_textures(all_at_once = True, pca_data = False)
+    S.plot_clusters_textures(all_at_once = True, pca_data = True)
+    
+    #Loop through each cell number and cluster all images for that cell no.
     #S.cluster_all_cells(method = 'dbscan', norm_data = True, centre_data = True, pca_data = False, 
     #                    dbscan_eps = 1.5, dbscan_ms = 5)
-    #S.plot_clusters_textures(image_no = 0, cell_no = None, pca_data = True)
-    #S.plot_clusters_textures(image_no = 0, cell_no = None, norm_data = True, pca_data = False)
+
+    #Show the results of the classification
     #S.plot_class_textures(image_no = 0, cell_no = None, pca_data = True)
     #S.plot_class_textures(image_no = 0, cell_no = None, norm_data = True, pca_data = False)
-#     S.show_anomalies(image_no = 0)
-#     S.show_anomalies(image_no = 1)
-#     S.show_anomalies(image_no = 2)
-#     S.show_anomalies(image_no = 3)
+    
+    #Show the clustering onto the original image, when cluster_cells(all_at_once = False)
+    #S.show_clusters_oneimage(0)
+    
+    S.show_anomalies(image_no = 0)
+    S.show_anomalies(image_no = 1)
+    S.show_anomalies(image_no = 2)
+    S.show_anomalies(image_no = 4)
+    S.show_clusters_allatonce(0)
+    S.show_clusters_allatonce(1)
+    S.show_clusters_allatonce(2)
+    S.show_clusters_allatonce(4)
 #     S.show_image_cell(0, 0)
 #     S.show_image_cell(0, 1)
 #     S.show_image_cell(0, 2)
@@ -913,6 +1118,9 @@ if __name__ == '__main__':
 #     S.show_image_cell(0, 4)
 #     S.show_image_cell(0, 5)
 #     S.show_image_cell(0, 6)
+
+    #If you have saved ground truth results, load them now
+    #S.load_gt_matrix(1)
 
     #S.gt_image(0)
 #    S.record_all_groundtruth()
